@@ -83,6 +83,24 @@ func (c *Client) InjectionOperation(input InjectionOperationInput) (*resty.Respo
 	return resp, opstring, nil
 }
 
+func (c *Client) InjectionOperationRaw(input InjectionOperationInput) (*resty.Response, error) {
+	err := validator.New().Struct(input)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to inject operation: invalid input")
+	}
+
+	v, err := json.Marshal(input.Operation)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to inject operation")
+	}
+	resp, err := c.post("/injection/operation", v, input.contructRPCOptions()...)
+	if err != nil {
+		return resp, errors.Wrap(err, "failed to inject operation")
+	}
+
+	return resp, nil
+}
+
 /*
 InjectionBlockInput is the input for the InjectionBlock function.
 
