@@ -101,6 +101,80 @@ func (c *Client) InjectionOperationRaw(input InjectionOperationInput) (*resty.Re
 	return resp, nil
 }
 
+type InjectionOperationResultStatus string
+
+const (
+	Pass   InjectionOperationResultStatus = "pass"
+	Failed InjectionOperationResultStatus = "failed"
+)
+
+type InjectionOperationResult struct {
+	Status      InjectionOperationResultStatus
+	OpHash      string
+	ResultError *ResultError
+	Resp        *resty.Response
+}
+
+func (c *Client) InjectionOperationWrapped(input InjectionOperationInput) (*InjectionOperationResult, error) {
+	err := validator.New().Struct(input)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to inject operation: invalid input")
+	}
+
+	v, err := json.Marshal(input.Operation)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to inject operation")
+	}
+	resp, err := c.post("/injection/operation", v, input.contructRPCOptions()...)
+	if err != nil {
+		return &InjectionOperationResult{
+			Status:      Failed,
+			OpHash:      "",
+			ResultError: nil,
+			Resp:        resp,
+		}, errors.Wrap(err, "failed to inject operation")
+	}
+
+	if resp.StatusCode() == 200 {
+		var opstring string
+		err = json.Unmarshal(resp.Body(), &opstring)
+		if err != nil {
+			return &InjectionOperationResult{
+				Status:      Failed,
+				OpHash:      "",
+				ResultError: nil,
+				Resp:        resp,
+			}, errors.Wrap(err, "failed to inject operation: failed to parse json")
+		}
+
+		return &InjectionOperationResult{
+			Status:      Pass,
+			OpHash:      opstring,
+			ResultError: nil,
+			Resp:        resp,
+		}, nil
+
+	} else {
+		var resultError ResultError
+		err = json.Unmarshal(resp.Body(), &resultError)
+		if err != nil {
+			return &InjectionOperationResult{
+				Status:      Failed,
+				OpHash:      "",
+				ResultError: nil,
+				Resp:        resp,
+			}, errors.Wrap(err, "failed to inject operation: failed to parse json")
+		}
+
+		return &InjectionOperationResult{
+			Status:      Failed,
+			OpHash:      "",
+			ResultError: &resultError,
+			Resp:        resp,
+		}, errors.Wrap(err, "failed to inject operation")
+	}
+}
+
 /*
 InjectionBlockInput is the input for the InjectionBlock function.
 
